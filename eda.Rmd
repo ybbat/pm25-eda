@@ -1,0 +1,159 @@
+---
+title: "pm2.5 eda"
+output: html_document
+date: "2023-11-13"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(data.table)
+library(dplyr)
+library(dtplyr)
+library(stringr)
+```
+
+EDA done based on questions for Course Project 2 for Exploratory Data Analysis course by John Hopkins University
+
+## Loading data
+
+```{r loading}
+dt <- fread("data/merged.csv") # run prep_data to create this file
+```
+
+Data consists of a summary data frame and a codetable data frame, which have been merged into merged.csv. Summary contains all of the PM2.5 commissions data for 1999, 2002, 2005, 2008. The code table provides a mapping from the SCC digit strings in the summary table to the actual name of the PM2.5 source.
+
+```{r}
+summary(dt)
+```
+
+```{r}
+str(dt)
+```
+
+```{r}
+slice_sample(dt, n=5)
+```
+
+## Question 1: Have total emissions from PM2.5 decreased from 1999 to 2008?
+
+```{r, echo=FALSE}
+with(dt, {
+    sums <- tapply(Emissions, year, sum)
+    years <- as.numeric(names(sums))
+    plot(sums ~ years,
+         xaxt="n",
+         main="Total emission trend",
+         xlab="Year",
+         ylab="Total pm2.5 emissions (tons)")
+    
+    # fit <- lm(sums ~ years)
+    abline(lm(sums ~ years))
+    
+    axis(1, at=unique(year), labels=unique(year))
+})
+```
+
+This plot shows a clear negative trend, meaning that emissions have decreased from 1999 to 2008.
+
+## Question 2: Have total emissions from PM2.5 decreased in Baltimore City, Maryland
+
+```{r, echo=FALSE}
+bmore <- subset(dt, dt$fips == "24510")
+with(bmore, {
+    sums <- tapply(Emissions, year, sum)
+    years <- as.numeric(names(sums))
+    plot(sums ~ years,
+         xaxt="n",
+         main="Total emission trend, Baltimore City",
+         xlab="Year",
+         ylab="Total pm2.5 emissions (tons)")
+    
+    fit <- lm(sums ~ years)
+    abline(fit)
+    
+    axis(1, at=unique(year), labels=unique(year))
+})
+
+```
+
+By subsetting data to Baltimore City, Maryland (fips == "24510") we can we that total emissions have raised here.
+
+## Question 3: Of the 4 types of sources, which see decreases in emissions for Baltimore City
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+processed <- bmore %>% group_by(type, year) %>% summarise(emissions_sum = sum(Emissions))
+
+ggplot(processed, aes(year, emissions_sum)) +
+    facet_grid(.~type) +
+    geom_point() +
+    geom_smooth(method="lm", se=FALSE) +
+    ggtitle("Trends per type ", subtitle="Baltimore City") +
+    xlab("Year") +
+    ylab("Total pm2.5 emissions (tons)") +
+    scale_x_continuous(labels=unique(processed$year), breaks=unique(processed$year)) +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+```
+
+From this plot we can see taht the pm2.5 trends downwards for NON-ROAD, NON-POINT, and ROAD. But it is trending up for the POINT type.
+
+## Question 4: How have emissions from coal combustion sources changed?
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+coal <- dt[str_detect(EI.Sector, "[cC]oal")] %>% group_by(year) %>% summarise(emissions_sum = sum(Emissions))
+
+ggplot(coal, aes(year, emissions_sum)) +
+    geom_point() +
+    geom_smooth(method="lm", se=FALSE, aes(colour="1999-2008")) +
+    geom_smooth(method="lm", se=FALSE, data=head(coal, 3), aes(colour="1999-2005")) +
+    ggtitle("Coal emissions trend") +
+    xlab("Year") +
+    ylab("Total pm2.5 emissions (tons)") +
+    scale_x_continuous(labels=unique(processed$year), breaks=unique(processed$year)) +
+    guides(colour=guide_legend(title="Trend over"))
+
+```
+
+Yes! Although the trend for 1999-2005 (shown in red) seems to be fairly consistent, the only real decrease being 2008.
+
+## Question 5: How have emissions from motor vehicle sources changed?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+motor <- bmore[str_detect(EI.Sector, "Mobile")] %>% group_by(year, EI.Sector) %>% summarise(emissions_sum = sum(Emissions))
+total <- motor %>% group_by(year) %>% summarise(emissions_sum = sum(emissions_sum)) %>% mutate(EI.Sector = "TOTAL")
+all <- rbind(total, motor)
+
+ggplot(all, aes(year, emissions_sum, colour=EI.Sector)) +
+    geom_point() +
+    geom_smooth() +
+    ggtitle("Vehicle emissions trend", "Baltimore City") +
+    xlab("Year") +
+    ylab("Total pm2.5 emissions (tons)") +
+    scale_x_continuous(labels=unique(processed$year), breaks=unique(processed$year))
+
+```
+
+Overall emissions from vehicles are lower than in 1999, but have risen in 2008 mainly due to commercial marine vessels, which is the main contributor.
+
+## Question 6: Has Baltimore City emissions from motor vehicles changed greater than in Los Angeles County?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+filtered <- dt[fips == "24510" | fips == "06037"]
+sums <- filtered[str_detect(EI.Sector, "Mobile")] %>%
+    group_by(year, fips) %>%
+    summarise(emissions_sum = sum(Emissions)) %>%
+    mutate(county=case_match(fips,
+                             "24510" ~ "Baltimore City",
+                             "06037" ~ "Los Angeles County"))
+
+ggplot(sums, aes(year, emissions_sum, colour=county)) +
+    geom_point() +
+    geom_smooth() +
+    ggtitle("Vehicle emissions trend", "Baltimore City vs Los Angeles County") +
+    xlab("Year") +
+    ylab("Total pm2.5 emissions (tons)") +
+    scale_x_continuous(labels=unique(processed$year), breaks=unique(processed$year))
+
+```
+
+The change in Los Angeles County is much greater, presumably due to the significant population difference (9.78 million vs 560 thousand as of 2008).
