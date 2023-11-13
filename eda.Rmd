@@ -148,7 +148,8 @@ sums <- filtered[str_detect(EI.Sector, "Mobile")] %>%
                              "24510" ~ "Baltimore City",
                              "06037" ~ "Los Angeles County"))
 
-ggplot(sums, aes(year, emissions_sum, colour=county)) +
+ggplot(sums, aes(year, emissions_sum)) +
+    facet_grid(.~county) +
     geom_point() +
     geom_smooth() +
     ggtitle("Vehicle emissions trend", "Baltimore City vs Los Angeles County") +
@@ -158,4 +159,4 @@ ggplot(sums, aes(year, emissions_sum, colour=county)) +
 
 ```
 
-The change in Los Angeles County is much greater, presumably due to the significant population difference (9.78 million vs 560 thousand as of 2008).
+The change in Los Angeles County is much greater, presumably in part due to the significant population difference (9.78 million vs 560 thousand as of 2008).
