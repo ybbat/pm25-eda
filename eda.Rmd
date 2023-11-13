@@ -1,6 +1,8 @@
 ---
 title: "pm2.5 eda"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 date: "2023-11-13"
 ---
 
